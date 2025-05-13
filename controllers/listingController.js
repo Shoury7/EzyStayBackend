@@ -2,6 +2,7 @@ import { v2 as cloudinaryV2 } from "cloudinary";
 import Listing from "../models/Listing.js";
 import Review from "../models/Review.js";
 import dotenv from "dotenv";
+import User from "../models/User.js";
 dotenv.config();
 
 // Cloudinary config
@@ -13,6 +14,8 @@ cloudinaryV2.config({
 
 export const createListing = async (req, res) => {
   try {
+    const userId = req.user.id;
+
     const uploadPromises = req.files.map((file) => {
       return new Promise((resolve, reject) => {
         const stream = cloudinaryV2.uploader.upload_stream(
@@ -31,21 +34,54 @@ export const createListing = async (req, res) => {
 
     const uploadedImages = await Promise.all(uploadPromises);
 
-    const newListing = new Listing({
-      title: req.body.title,
-      description: req.body.description,
-      price: req.body.price,
-      location: req.body.location,
-      country: req.body.country,
+    const { title, description, price, location, country } = req.body;
+
+    // 🌍 Fetch coordinates from Mapbox Geocoding API using fetch
+    const mapboxToken = process.env.MAPBOX_TOKEN;
+    const response = await fetch(
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        location
+      )}.json?access_token=${mapboxToken}`
+    );
+
+    if (!response.ok) {
+      return res
+        .status(400)
+        .json({ message: "Failed to fetch coordinates from Mapbox." });
+    }
+
+    const geoData = await response.json();
+
+    if (!geoData.features.length) {
+      return res.status(400).json({ message: "Invalid location input." });
+    }
+
+    const geometry = {
+      type: "Point",
+      coordinates: geoData.features[0].center, // [lng, lat]
+    };
+
+    const newListing = await Listing.create({
+      title,
+      description,
+      price,
+      location,
+      country,
       images: uploadedImages,
-      createdBy: req.user.id,
+      geometry,
+      createdBy: userId,
     });
 
-    await newListing.save();
-    res.status(201).json(newListing);
+    await User.findByIdAndUpdate(userId, {
+      $push: { listings: newListing._id },
+    });
+
+    res
+      .status(201)
+      .json({ message: "Listing created successfully", listing: newListing });
   } catch (error) {
-    console.error("Create Listing Error:", error);
-    res.status(500).json({ message: "Server Error", error });
+    console.error("Error creating listing:", error);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -86,11 +122,33 @@ export const updateListingById = async (req, res) => {
   const updateData = req.body;
 
   try {
+    // 🌍 Update geometry if location is provided
+    if (updateData.location) {
+      const mapboxToken = process.env.MAPBOX_TOKEN;
+      const mapboxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
+        updateData.location
+      )}.json?access_token=${mapboxToken}`;
+
+      const geoRes = await fetch(mapboxUrl);
+      const geoData = await geoRes.json();
+
+      if (!geoData.features.length) {
+        return res.status(400).json({ message: "Invalid location input." });
+      }
+
+      const geometry = {
+        type: "Point",
+        coordinates: geoData.features[0].center, // [lng, lat]
+      };
+
+      updateData.geometry = geometry;
+    }
+
     const updatedListing = await Listing.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
     })
-      .populate("createdBy", { email: 1, _id: 0 }) // ✅ only email, no _id
+      .populate("createdBy", { email: 1, _id: 0 })
       .lean();
 
     if (!updatedListing) {
@@ -99,6 +157,7 @@ export const updateListingById = async (req, res) => {
 
     res.status(200).json(updatedListing);
   } catch (error) {
+    console.error("Error updating listing:", error);
     res.status(500).json({ message: "Error updating listing", error });
   }
 };
@@ -215,5 +274,23 @@ export const deleteReview = async (req, res) => {
     res.status(200).json({ message: "Review deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+//giving the listings owned by a admin
+export const getListingsByUser = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const user = await User.findById(userId).populate("listings");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json(user.listings);
+  } catch (error) {
+    console.error("Error fetching user listings:", error);
+    res.status(500).json({ message: "Internal server error" }, user);
   }
 };

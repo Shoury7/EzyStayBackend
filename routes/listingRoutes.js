@@ -9,6 +9,7 @@ import {
   getAllReviews,
   updateReview,
   deleteReview,
+  getListingsByUser,
 } from "../controllers/listingController.js";
 import { authenticate } from "../middlewares/authenticate.js";
 import { authorizeRoles } from "../middlewares/authorize.js";
@@ -30,7 +31,8 @@ router.post(
 
 //get all listings route
 router.get("/", getAllListings);
-
+//get listing by user:
+router.get("/me", authenticate, authorizeRoles("admin"), getListingsByUser);
 //get listing by id
 router.get("/:id", authenticate, getListingById);
 
@@ -54,4 +56,5 @@ router.get("/:id/reviews", authenticate, getAllReviews);
 router.put("/:id/reviews", authenticate, updateReview);
 //delete review from the user
 router.delete("/:id/reviews", authenticate, deleteReview);
+
 export default router;
