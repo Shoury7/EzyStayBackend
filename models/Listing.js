@@ -1,10 +1,15 @@
 import mongoose from "mongoose";
+
 const listingSchema = new mongoose.Schema({
   title: { type: String, required: true },
   description: { type: String, required: true },
   price: { type: Number, required: true },
   location: { type: String, required: true },
   country: { type: String, required: true },
+  isAvailable: {
+    type: Boolean,
+    default: true, // Default to available
+  },
   geometry: {
     type: {
       type: String,

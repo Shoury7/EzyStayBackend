@@ -1,7 +1,6 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
-const ADMIN_SECRET = "xyz";
 const router = express.Router();
 
 const createToken = (user) => {
@@ -16,7 +15,7 @@ router.post("/register", async (req, res) => {
 
   try {
     if (role === "admin") {
-      if (!adminKey || adminKey !== ADMIN_SECRET) {
+      if (!adminKey || adminKey !== process.env.ADMIN_SECRET) {
         return res
           .status(403)
           .json({ message: "Invalid or missing admin secret key" });
@@ -49,7 +48,7 @@ router.post("/login", async (req, res) => {
       username: user.name,
       userid: user._id,
       role: user.role,
-      email: user.email, // ✅ Include email here
+      email: user.email,
       message: "Login successful",
     });
   } catch (err) {

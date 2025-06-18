@@ -9,6 +9,7 @@ import { authorizeRoles } from "./middlewares/authorize.js";
 import authRoutes from "./routes/auth.js";
 import listingRoutes from "./routes/listingRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import { getAdminSummary } from "./routes/summary.js";
 
 const app = express();
 app.use(cors());
@@ -27,6 +28,13 @@ app.get("/api/user", authenticate, authorizeRoles("user"), (req, res) => {
 app.use("/api/listings", listingRoutes);
 
 app.use("/api/payments", paymentRoutes);
+
+app.get(
+  "/admin/dashboard",
+  authenticate,
+  authorizeRoles("admin"),
+  getAdminSummary
+);
 mongoose
   .connect(process.env.MONGO_URI, {})
   .then(() => {
